@@ -700,9 +700,21 @@ class StremioContinueWatchingCard extends LitElement {
   }
 
   _resumeInStremio(item) {
+    // When a Fire TV is configured, resume there — the point of this card is to
+    // send playback to the TV, not open Stremio on the device you're browsing
+    // from. For series, use the episode selected in the detail view (falling
+    // back to the one being watched).
+    if (this.config.fire_tv_entity) {
+      const season = item.selectedSeason || item.season || null;
+      const episode = item.selectedEpisode || item.episode || null;
+      this._sendToFireTv(item, season, episode);
+      return;
+    }
+
+    // No Fire TV configured: open the deep link locally on this device.
     const type = item.type === 'series' ? 'series' : 'movie';
     const id = item.imdb_id || item.id;
-    
+
     // Validate ID format to prevent protocol injection
     // IMDb IDs should match pattern: tt followed by 7-8 digits
     if (id && typeof id === 'string') {
@@ -1104,8 +1116,8 @@ class StremioContinueWatchingCard extends LitElement {
 
         <div class="detail-actions">
           <button class="detail-button primary" @click=${() => this._resumeInStremio(item)}>
-            <ha-icon icon="mdi:play"></ha-icon>
-            Resume in Stremio
+            <ha-icon icon="${this.config.fire_tv_entity ? 'mdi:television-play' : 'mdi:play'}"></ha-icon>
+            ${this.config.fire_tv_entity ? 'Resume on Fire TV' : 'Resume in Stremio'}
           </button>
           <button class="detail-button secondary" @click=${() => this._getStreamsForDetailItem(item)}>
             <ha-icon icon="mdi:format-list-bulleted"></ha-icon>
