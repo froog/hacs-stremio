@@ -433,12 +433,13 @@ class StremioContinueWatchingCard extends LitElement {
       horizontal_scroll: false, // Horizontal carousel mode
       
       // Behavior options
-      tap_action: 'details', // details, play, streams
+      tap_action: 'details', // details, play, streams, fire_tv
       default_sort: 'recent', // recent, title, progress
-      
+
       // Device integration
       apple_tv_entity: undefined, // For Apple TV handover
-      
+      fire_tv_entity: undefined, // For Fire TV handover (tap_action: 'fire_tv')
+
       // Note: entity is NOT defaulted here - _resolveEntity will auto-discover
       ...config,
     };
@@ -600,15 +601,58 @@ class StremioContinueWatchingCard extends LitElement {
   }
 
   _handleItemClick(item) {
+    // Fire TV handover: send the item straight to the configured Fire TV.
+    // For series, pick the episode first (defaults to the one being watched).
+    if (this.config.tap_action === 'fire_tv') {
+      if (item.type === 'series') {
+        this._showEpisodePicker(item, 'fire_tv');
+      } else {
+        this._sendToFireTv(item);
+      }
+      return;
+    }
+
     // For TV series, show episode picker first to select season/episode
     if (item.type === 'series') {
       console.log('[Continue Watching Card] TV Series clicked, showing episode picker first');
       this._showEpisodePicker(item, 'detail');
       return;
     }
-    
+
     // For movies, go directly to detail view
     this._showDetailView(item);
+  }
+
+  _sendToFireTv(item, season = null, episode = null) {
+    const id = item.imdb_id || item.id;
+    const device = this.config.fire_tv_entity;
+    if (!device) {
+      this._showToast('Set a Fire TV in the card config (fire_tv_entity)');
+      return;
+    }
+    if (!id || !this._hass) {
+      console.error('[Continue Watching Card] Cannot send to Fire TV: missing ID or hass');
+      return;
+    }
+
+    const serviceData = {
+      device_id: device,
+      media_id: id,
+      media_type: item.type || 'movie',
+    };
+    if (item.type === 'series' && season && episode) {
+      serviceData.season = season;
+      serviceData.episode = episode;
+    }
+
+    this._showToast('Opening on Fire TV…');
+    this._hass
+      .callService('stremio', 'handover_to_fire_tv', serviceData)
+      .then(() => this._showToast(`Sent "${item.title || id}" to Fire TV`))
+      .catch((err) => {
+        console.error('[Continue Watching Card] Fire TV handover failed:', err);
+        this._showToast('Fire TV handover failed');
+      });
   }
   
   _showDetailView(item) {
@@ -701,6 +745,9 @@ class StremioContinueWatchingCard extends LitElement {
           selectedEpisode: episode,
         };
         this._showDetailView(itemWithEpisode);
+      } else if (mode === 'fire_tv') {
+        // Send the selected episode straight to the Fire TV.
+        this._sendToFireTv(item, season, episode);
       } else {
         // Default: fetch streams for the selected episode
         this._fetchStreams(item, season, episode);
