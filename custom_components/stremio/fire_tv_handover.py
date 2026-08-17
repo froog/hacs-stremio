@@ -40,6 +40,11 @@ ANDROIDTV_ADB_COMMAND_SERVICE = "adb_command"
 # Android implicit intent that opens a URI in whichever app registers its scheme.
 _INTENT_ACTION_VIEW = "android.intent.action.VIEW"
 
+# Wake the device before launching. A sleeping Fire TV otherwise drops the deep
+# link; waking it also drives HDMI-CEC one-touch-play, which wakes the TV. The
+# short sleep gives the device a moment to come up before the intent fires.
+_WAKE_COMMAND = "input keyevent KEYCODE_WAKEUP && sleep 1"
+
 
 class FireTVHandoverError(HomeAssistantError):
     """Error during a Fire TV handover operation."""
@@ -106,6 +111,7 @@ class FireTVHandoverManager:
         media_id: str,
         season: int | None = None,
         episode: int | None = None,
+        wake: bool = True,
     ) -> dict[str, str]:
         """Open a title in Stremio on the given Fire TV.
 
@@ -116,6 +122,8 @@ class FireTVHandoverManager:
             media_id: IMDb id of the title.
             season: Season number (series episode target).
             episode: Episode number (series episode target).
+            wake: Wake the device (and, via HDMI-CEC, the TV) before launching.
+                A sleeping Fire TV otherwise drops the deep link.
 
         Returns:
             A dict with the ``uri``, ``command`` and ``device_id`` used.
@@ -134,10 +142,14 @@ class FireTVHandoverManager:
             )
 
         uri = build_deep_link(media_type, media_id, season, episode)
-        command = build_adb_command(uri)
+        launch = build_adb_command(uri)
+        command = f"{_WAKE_COMMAND} && {launch}" if wake else launch
 
         _LOGGER.info(
-            "Fire TV handover: device=%s uri=%s", device_entity_id, uri
+            "Fire TV handover: device=%s uri=%s wake=%s",
+            device_entity_id,
+            uri,
+            wake,
         )
 
         try:

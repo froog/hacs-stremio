@@ -100,6 +100,34 @@ class TestFireTVHandoverManager:
         )
         assert result["device_id"] == "media_player.fire_tv"
 
+    async def test_handover_wakes_device_by_default(self, mock_hass):
+        manager = FireTVHandoverManager(mock_hass)
+
+        await manager.async_handover(
+            device_entity_id="media_player.fire_tv",
+            media_type="movie",
+            media_id="tt1",
+        )
+
+        cmd = mock_hass.services.async_call.call_args.args[2]["command"]
+        assert "KEYCODE_WAKEUP" in cmd
+        # Wake must precede the launch.
+        assert cmd.index("KEYCODE_WAKEUP") < cmd.index("am start")
+
+    async def test_handover_wake_can_be_disabled(self, mock_hass):
+        manager = FireTVHandoverManager(mock_hass)
+
+        await manager.async_handover(
+            device_entity_id="media_player.fire_tv",
+            media_type="movie",
+            media_id="tt1",
+            wake=False,
+        )
+
+        cmd = mock_hass.services.async_call.call_args.args[2]["command"]
+        assert "KEYCODE_WAKEUP" not in cmd
+        assert cmd.startswith("am start")
+
     async def test_handover_without_androidtv_raises(self, mock_hass):
         mock_hass.services.has_service = MagicMock(return_value=False)
         manager = FireTVHandoverManager(mock_hass)
