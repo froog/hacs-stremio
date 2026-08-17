@@ -10,6 +10,12 @@
  * @cacheBust 2026021223
  */
 
+import {
+  handoverToFireTv,
+  handoverToAppleTv,
+  renderOpenTargets,
+} from './stremio-play-targets.js';
+
 // Safe LitElement access - wait for HA frontend to be ready
 const loadCardHelpers = async () => {
   if (customElements.get("ha-panel-lovelace")) {
@@ -561,8 +567,10 @@ class StremioBrowseCard extends LitElement {
       tap_action: 'details', // details, play, streams
       
       // Device integration
-      apple_tv_entity: undefined, // For Apple TV handover
-      
+      apple_tv_entity: undefined, // For Apple TV handover ("Open on Apple TV")
+      fire_tv_entity: undefined, // For Fire TV handover ("Open on Fire TV")
+      show_open_in_stremio: true, // Show the local "Open in Stremio" button
+
       ...config,
     };
     this._viewMode = this.config.default_view;
@@ -999,6 +1007,24 @@ class StremioBrowseCard extends LitElement {
         console.warn('Stremio Browse Card: Invalid media ID format', id);
       }
     }
+  }
+
+  // Open the item on a handover target (Fire TV / Apple TV). Catalog items have
+  // no watched episode, so this opens the show/movie (no season/episode).
+  _openTargetHandover(item, handoverFn, label, entity) {
+    const id = this._extractMediaId(item);
+    const type = this._getItemMediaType(item);
+    if (!entity || !id || !this._hass) {
+      this._showToast(`No ${label} configured`);
+      return;
+    }
+    this._showToast(`Opening on ${label}…`);
+    handoverFn(this._hass, entity, { id, type })
+      .then(() => this._showToast(`Sent "${item.title}" to ${label}`))
+      .catch((err) => {
+        console.error(`[Browse Card] ${label} handover failed:`, err);
+        this._showToast(`${label} handover failed`);
+      });
   }
 
   _getStreams(item) {
@@ -1506,10 +1532,12 @@ class StremioBrowseCard extends LitElement {
         </div>
 
         <div class="detail-actions">
-          <button class="detail-button primary" @click=${() => this._openInStremio(item)}>
-            <ha-icon icon="mdi:play"></ha-icon>
-            Open in Stremio
-          </button>
+          ${renderOpenTargets(html, {
+            config: this.config,
+            onStremio: () => this._openInStremio(item),
+            onFireTv: () => this._openTargetHandover(item, handoverToFireTv, 'Fire TV', this.config.fire_tv_entity),
+            onAppleTv: () => this._openTargetHandover(item, handoverToAppleTv, 'Apple TV', this.config.apple_tv_entity),
+          })}
           <button class="detail-button secondary" @click=${() => this._getStreamsForDetailItem(item)}>
             <ha-icon icon="mdi:format-list-bulleted"></ha-icon>
             Get Streams

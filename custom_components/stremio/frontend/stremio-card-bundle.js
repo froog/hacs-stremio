@@ -11,6 +11,7 @@
 
 // Import card components (relative paths - all in frontend/ folder)
 // Cache busting is handled via version query param on the bundle URL
+import './stremio-play-targets.js'; // shared "Open on …" helpers (loaded first)
 import './stremio-browse-card.js';
 import './stremio-continue-watching-card.js';
 import './stremio-episode-picker.js';

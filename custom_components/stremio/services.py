@@ -42,8 +42,8 @@ from .const import (
     SERVICE_SEARCH_CATALOG,
     SERVICE_SEARCH_LIBRARY,
 )
-from .fire_tv_handover import FireTVHandoverError, FireTVHandoverManager
 from .coordinator import StremioDataUpdateCoordinator
+from .fire_tv_handover import FireTVHandoverError, FireTVHandoverManager
 from .stremio_client import StremioClient, StremioConnectionError
 
 _LOGGER = logging.getLogger(__name__)
@@ -109,6 +109,9 @@ HANDOVER_SCHEMA = vol.Schema(
     {
         vol.Required(ATTR_DEVICE_ID): cv.entity_id,
         vol.Optional(ATTR_MEDIA_ID): cv.string,
+        vol.Optional(ATTR_MEDIA_TYPE): vol.In(["movie", "series"]),
+        vol.Optional(ATTR_SEASON): vol.Coerce(int),  # type: ignore[arg-type]
+        vol.Optional(ATTR_EPISODE): vol.Coerce(int),  # type: ignore[arg-type]
         vol.Optional(ATTR_STREAM_URL): cv.string,
         vol.Optional(ATTR_METHOD): vol.In(["auto", "airplay", "vlc", "direct"]),
     }
@@ -449,6 +452,9 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         device_id = call.data[ATTR_DEVICE_ID]
         media_id = call.data.get(ATTR_MEDIA_ID)
         stream_url = call.data.get(ATTR_STREAM_URL)
+        media_type = call.data.get(ATTR_MEDIA_TYPE)
+        season = call.data.get(ATTR_SEASON)
+        episode = call.data.get(ATTR_EPISODE)
 
         # Get configured default method from entry options
         entry = hass.config_entries.async_get_entry(entry_id)
@@ -508,12 +514,15 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                     "time_offset": current.get("time_offset", 0),
                 }
             else:
-                media_type = "movie"  # Default assumption
-                season = None
-                episode = None
+                # media_id given explicitly: use the media_type/season/episode
+                # from the call (defaulting to movie), so a specific series
+                # episode resolves the right stream.
+                media_type = media_type or "movie"
                 media_info = {
                     "imdb_id": media_id,
                     "type": media_type,
+                    "season": season,
+                    "episode": episode,
                 }
 
             try:

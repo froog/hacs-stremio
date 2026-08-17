@@ -7,6 +7,13 @@
  * @extends LitElement
  */
 
+import {
+  openInStremioLocal,
+  handoverToFireTv,
+  handoverToAppleTv,
+  renderOpenTargets,
+} from './stremio-play-targets.js';
+
 // Safe LitElement access - wait for HA frontend to be ready
 const loadCardHelpers = async () => {
   if (customElements.get("ha-panel-lovelace")) {
@@ -437,8 +444,9 @@ class StremioContinueWatchingCard extends LitElement {
       default_sort: 'recent', // recent, title, progress
 
       // Device integration
-      apple_tv_entity: undefined, // For Apple TV handover
-      fire_tv_entity: undefined, // For Fire TV handover (tap_action: 'fire_tv')
+      apple_tv_entity: undefined, // For Apple TV handover ("Open on Apple TV")
+      fire_tv_entity: undefined, // For Fire TV handover ("Open on Fire TV" / tap_action: 'fire_tv')
+      show_open_in_stremio: true, // Show the local "Open in Stremio" button
 
       // Note: entity is NOT defaulted here - _resolveEntity will auto-discover
       ...config,
@@ -623,6 +631,11 @@ class StremioContinueWatchingCard extends LitElement {
     this._showDetailView(item);
   }
 
+  _openInStremio(item) {
+    const type = item.type === 'series' ? 'series' : 'movie';
+    openInStremioLocal(type, item.imdb_id || item.id);
+  }
+
   _sendToFireTv(item, season = null, episode = null) {
     const id = item.imdb_id || item.id;
     const device = this.config.fire_tv_entity;
@@ -634,27 +647,40 @@ class StremioContinueWatchingCard extends LitElement {
       console.error('[Continue Watching Card] Cannot send to Fire TV: missing ID or hass');
       return;
     }
-
-    const serviceData = {
-      device_id: device,
-      media_id: id,
-      media_type: item.type || 'movie',
-    };
-    if (item.type === 'series' && season && episode) {
-      serviceData.season = season;
-      serviceData.episode = episode;
-    }
-
+    const type = item.type || 'movie';
+    const ep = type === 'series' && season && episode ? { season, episode } : {};
     this._showToast('Opening on Fire TV…');
-    this._hass
-      .callService('stremio', 'handover_to_fire_tv', serviceData)
+    handoverToFireTv(this._hass, device, { id, type, ...ep })
       .then(() => this._showToast(`Sent "${item.title || id}" to Fire TV`))
       .catch((err) => {
         console.error('[Continue Watching Card] Fire TV handover failed:', err);
         this._showToast('Fire TV handover failed');
       });
   }
-  
+
+  _sendToAppleTv(item, season = null, episode = null) {
+    const id = item.imdb_id || item.id;
+    const device = this.config.apple_tv_entity;
+    if (!device) {
+      this._showToast('Set an Apple TV in the card config (apple_tv_entity)');
+      return;
+    }
+    if (!id || !this._hass) {
+      console.error('[Continue Watching Card] Cannot send to Apple TV: missing ID or hass');
+      return;
+    }
+    const type = item.type || 'movie';
+    const ep = type === 'series' && season && episode ? { season, episode } : {};
+    this._showToast('Opening on Apple TV…');
+    handoverToAppleTv(this._hass, device, { id, type, ...ep })
+      .then(() => this._showToast(`Sent "${item.title || id}" to Apple TV`))
+      .catch((err) => {
+        console.error('[Continue Watching Card] Apple TV handover failed:', err);
+        this._showToast('Apple TV handover failed');
+      });
+  }
+
+
   _showDetailView(item) {
     this._selectedItem = item;
     
@@ -697,35 +723,6 @@ class StremioContinueWatchingCard extends LitElement {
         composed: true,
       })
     );
-  }
-
-  _resumeInStremio(item) {
-    // When a Fire TV is configured, resume there — the point of this card is to
-    // send playback to the TV, not open Stremio on the device you're browsing
-    // from. For series, use the episode selected in the detail view (falling
-    // back to the one being watched).
-    if (this.config.fire_tv_entity) {
-      const season = item.selectedSeason || item.season || null;
-      const episode = item.selectedEpisode || item.episode || null;
-      this._sendToFireTv(item, season, episode);
-      return;
-    }
-
-    // No Fire TV configured: open the deep link locally on this device.
-    const type = item.type === 'series' ? 'series' : 'movie';
-    const id = item.imdb_id || item.id;
-
-    // Validate ID format to prevent protocol injection
-    // IMDb IDs should match pattern: tt followed by 7-8 digits
-    if (id && typeof id === 'string') {
-      // Basic sanitization: only allow alphanumeric and safe characters
-      const sanitizedId = id.replace(/[^a-zA-Z0-9_-]/g, '');
-      if (sanitizedId && sanitizedId.length > 0) {
-        window.open(`stremio://detail/${type}/${sanitizedId}`, '_blank');
-      } else {
-        console.warn('Stremio Continue Watching Card: Invalid media ID format', id);
-      }
-    }
   }
 
   _getStreams(item) {
@@ -1115,10 +1112,22 @@ class StremioContinueWatchingCard extends LitElement {
         </div>
 
         <div class="detail-actions">
-          <button class="detail-button primary" @click=${() => this._resumeInStremio(item)}>
-            <ha-icon icon="${this.config.fire_tv_entity ? 'mdi:television-play' : 'mdi:play'}"></ha-icon>
-            ${this.config.fire_tv_entity ? 'Resume on Fire TV' : 'Resume in Stremio'}
-          </button>
+          ${renderOpenTargets(html, {
+            config: this.config,
+            onStremio: () => this._openInStremio(item),
+            onFireTv: () =>
+              this._sendToFireTv(
+                item,
+                item.selectedSeason || item.season,
+                item.selectedEpisode || item.episode
+              ),
+            onAppleTv: () =>
+              this._sendToAppleTv(
+                item,
+                item.selectedSeason || item.season,
+                item.selectedEpisode || item.episode
+              ),
+          })}
           <button class="detail-button secondary" @click=${() => this._getStreamsForDetailItem(item)}>
             <ha-icon icon="mdi:format-list-bulleted"></ha-icon>
             Get Streams

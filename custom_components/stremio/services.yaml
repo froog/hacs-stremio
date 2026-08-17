@@ -149,6 +149,36 @@ handover_to_apple_tv:
       example: "tt0903747"
       selector:
         text:
+    media_type:
+      name: Media Type
+      description: Type of media. Defaults to "movie" when a media_id is given.
+      required: false
+      example: "series"
+      selector:
+        select:
+          options:
+            - "movie"
+            - "series"
+    season:
+      name: Season
+      description: Season number (series only) to play a specific episode.
+      required: false
+      example: 1
+      selector:
+        number:
+          min: 1
+          max: 100
+          mode: box
+    episode:
+      name: Episode
+      description: Episode number (series only) to play a specific episode.
+      required: false
+      example: 1
+      selector:
+        number:
+          min: 1
+          max: 100
+          mode: box
     stream_url:
       name: Stream URL
       description: Direct stream URL to play. If not provided, fetches automatically.
