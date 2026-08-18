@@ -341,12 +341,19 @@ class StremioEpisodePicker extends LitElement {
         this._seriesMetadata = metadata;
         this.seasons = metadata.seasons.map(s => ({
           number: s.number,
-          name: s.title || `Season ${s.number}`,
+          // Cinemeta uses season 0 for specials/extras — label it as such
+          // rather than the confusing "Season 0".
+          name: s.number === 0 ? 'Specials' : (s.title || `Season ${s.number}`),
           episodes: s.episodes || [],
         }));
 
-        // Set selected season to last watched or first available
-        this._selectedSeason = this.mediaItem.lastWatchedSeason || this.seasons[0]?.number || 1;
+        // Default to the last-watched season, else the first real season
+        // (skip specials), else whatever is first.
+        this._selectedSeason =
+          this.mediaItem.lastWatchedSeason ||
+          this.seasons.find(s => s.number >= 1)?.number ||
+          this.seasons[0]?.number ||
+          1;
         this._updateEpisodesForSeason();
         
         console.log('[Episode Picker] Loaded', this.seasons.length, 'seasons');
