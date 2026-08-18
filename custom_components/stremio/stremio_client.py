@@ -1424,9 +1424,11 @@ class StremioClient:
                         continue
 
                     if season_num not in seasons_dict:
+                        # Cinemeta uses season 0 for specials/extras.
+                        title = "Specials" if season_num == 0 else f"Season {season_num}"
                         seasons_dict[season_num] = {
                             "number": season_num,
-                            "title": f"Season {season_num}",
+                            "title": title,
                             "episodes": [],
                         }
 
